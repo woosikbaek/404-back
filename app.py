@@ -21,8 +21,6 @@ def create_app():
   db.init_app(app)
   migrate.init_app(app, db)
 
-  mqtt_connect()
-
   socketio.init_app(app, cors_allowed_origins='*')
 
   from routes import front_bp
@@ -33,4 +31,9 @@ def create_app():
 
 if __name__ == '__main__':
   app = create_app()
-  app.run(host='0.0.0.0', port=5000)
+
+  if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    from utils.mqtt_client import mqtt_connect
+    mqtt_connect()
+
+  app.run(host="0.0.0.0", port=5000, debug=True)
