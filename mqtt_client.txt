@@ -19,7 +19,6 @@ port = int(os.getenv("MQTT_PORT"))
 
 TOPIC_CAMERA01_RESULT = os.getenv("MQTT_TOPIC_CAMERA01_RESULT")
 TOPIC_SENSOR_RESULT = os.getenv("MQTT_TOPIC_SENSOR_RESULT")
-TOPIC_SENSOR_CONTROL = os.getenv("MQTT_TOPIC_SENSOR_CONTROL", "sensor/control")
 
 client = mqtt.Client()
 
@@ -167,8 +166,6 @@ def on_connect(client, userdata, flags, rc):
     print("MQTT 연결됨")
     client.subscribe(TOPIC_CAMERA01_RESULT)
     client.subscribe(TOPIC_SENSOR_RESULT)
-    client.subscribe(TOPIC_SENSOR_CONTROL)
-    print(f"[MQTT] 구독 토픽: {TOPIC_SENSOR_CONTROL}, {TOPIC_SENSOR_RESULT}, {TOPIC_CAMERA01_RESULT}")
 
 
 # 센서 결과 저장
@@ -178,9 +175,16 @@ def save_sensor_result(data):
     device = data['device']
     result = data['result']  # ok / defect
 
-    # 안전장치: 차량이 생성되지 않았으면 저장 안 함
+    # LED 결과면 차 생성 (딱 한 번)
+    if device == 'LED':
+        car = Car()
+        db.session.add(car)
+        db.session.commit()
+        current_car_id = car.id
+        print(f"[신규 차량] Car ID: {current_car_id}")
+
+    # 안전장치
     if current_car_id is None:
-        print(f"[경고] current_car_id가 None입니다. {device} 저장 안 함")
         return
 
     sensor = SensorResult(
@@ -191,7 +195,7 @@ def save_sensor_result(data):
     db.session.add(sensor)
     db.session.commit()
     
-    # 🔔 WebSocket 이벤트 발송
+    # 💡 불량 알림 발송 (LED, BUZZER, SUPERSONIC)
     sensor_data = {
         'car_id': sensor.car_id,
         'device': sensor.device,
@@ -201,8 +205,12 @@ def save_sensor_result(data):
     
     if sensor.result == 'defect':
         emit_sensor_defect(sensor_data)
-    else:
+    
+    # ⚠️ WHEEL이 올 때까지 통계 업데이트 안 함 (WHEEL이 마지막이므로)
+    if device == 'WHEEL':
+        # 주행 검사 완료 = 모든 검사 완료
         emit_stats_update()
+        print(f"[검사 완료] Car ID {current_car_id} 모든 검사 완료 - 통계 업데이트 발송")
 
 
 # 외관 이미지 저장
@@ -240,7 +248,7 @@ def save_camera_result(data):
     db.session.add(camera)
     db.session.commit()
     
-    # 🔔 WebSocket 이벤트 발송
+    # � 불량 알림만 발송 (외관 검사)
     camera_data = {
         'car_id': camera.car_id,
         'result': camera.result,
@@ -250,54 +258,22 @@ def save_camera_result(data):
     
     if camera.result == 'defect':
         emit_camera_defect(camera_data)
-    else:
-        emit_stats_update()
+    
+    # ⚠️ 외관 검사 완료 후 주행(WHEEL)이 올 때까지 통계 업데이트 안 함
 
 
 # 메시지 수신
 def on_message(client, userdata, msg):
+    data = json.loads(msg.payload.decode())
+
     with _flask_app.app_context():
-        try:
-            # sensor/control 토픽: 기능검사 시작 신호
-            if msg.topic == TOPIC_SENSOR_CONTROL:
-                data = msg.payload.decode()
-                print(f"[sensor/control] 수신: {data}")
-                
-                if data.lower() == 'true':
-                    start_car_inspection()
-                return
-            
-            # 검사 결과 토픽
-            data = json.loads(msg.payload.decode())
-            
-            if msg.topic == TOPIC_SENSOR_RESULT:
-                save_sensor_result(data)
-                print(f"[센서 결과] {data}")
+        if msg.topic == TOPIC_SENSOR_RESULT:
+            save_sensor_result(data)
+            print(data)
 
-            elif msg.topic == TOPIC_CAMERA01_RESULT:
-                save_camera_result(data)
-                print(f"[카메라 결과] {data}")
-        
-        except Exception as e:
-            print(f"[에러] on_message 처리 실패: {e}")
-
-
-def start_car_inspection():
-    """기능검사 시작 - 새로운 차량 생성"""
-    global current_car_id
-    
-    car = Car()
-    db.session.add(car)
-    db.session.commit()
-    current_car_id = car.id
-    
-    print(f"[기능검사 시작] Car ID: {current_car_id}")
-    
-    # WebSocket 알림
-    if _socketio:
-        _socketio.emit('car_added', {'car_id': current_car_id})
-        # 통계 업데이트 발송 (차량 수 증가 반영)
-        emit_stats_update()
+        elif msg.topic == TOPIC_CAMERA01_RESULT:
+            save_camera_result(data)
+            print(data)
 
 
 client.on_connect = on_connect
