@@ -207,16 +207,32 @@ def save_sensor_result(data):
 
 # 외관 이미지 저장
 def save_camera_result_image(base64_str):
-    save_dir = "uploads/camera"
+    save_dir = "uploads/camera01"
     os.makedirs(save_dir, exist_ok=True)
 
     filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
     file_path = os.path.join(save_dir, filename)
 
-    image_bytes = base64.b64decode(base64_str)
+    # Robustly strip base64 header if present
+    if base64_str.startswith("data:image"):
+        try:
+            base64_str = base64_str.split(",", 1)[1]
+        except Exception as e:
+            print(f"[에러] base64 헤더 분리 실패: {e}")
+            return None
 
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
+    try:
+        image_bytes = base64.b64decode(base64_str)
+    except Exception as e:
+        print(f"[에러] base64 디코딩 실패: {e}")
+        return None
+
+    try:
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+    except Exception as e:
+        print(f"[에러] 이미지 파일 저장 실패: {e}")
+        return None
 
     return file_path
 
@@ -226,11 +242,18 @@ def save_camera_result(data):
     global current_car_id
 
     if current_car_id is None:
+        print("[경고] save_camera_result: current_car_id가 None입니다. 외관 결과 및 이미지를 저장하지 않습니다. MQTT payload:", data)
         return
 
     image_path = None
-    if data.get('image'):
-        image_path = save_camera_result_image(data['image'])
+    if data.get('detection') and data['detection'].get('result_image'):
+        image_path = save_camera_result_image(data['detection']['result_image'])
+        if image_path:
+            print(f"[저장] 외관 이미지 저장 완료: {image_path}")
+        else:
+            print(f"[에러] 외관 이미지 저장 실패. MQTT payload: {data}")
+    else:
+        print(f"[경고] result_image가 payload에 없습니다. MQTT payload: {data}")
 
     camera = CameraResult(
         car_id=current_car_id,
@@ -239,6 +262,7 @@ def save_camera_result(data):
     )
     db.session.add(camera)
     db.session.commit()
+    print(f"[저장] 외관 결과 저장 완료. car_id={camera.car_id}, result={camera.result}, image_path={camera.image_path}")
     
     # 🔔 WebSocket 이벤트 발송
     camera_data = {
