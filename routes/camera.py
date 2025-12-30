@@ -1,7 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_from_directory
 from models.camera_result import CameraResult
 from extensions import db
 from routes.socket_events import send_camera_defect, send_stats_update
+import os
 
 camera_bp = Blueprint('camera', __name__)
 
@@ -26,21 +27,43 @@ def get_camera_results():
   return jsonify(data)
 
 @bp.get('/defects')
-def get_camera_defects():
-    results = CameraResult.query.filter(
-        CameraResult.result == 'NG'
-    ).order_by(
-        CameraResult.id.asc()
-    ).all()
+def get_defects():
+    # 외관불량
+    camera_results = CameraResult.query.filter(
+        CameraResult.result == 'DEFECT'
+    ).order_by(CameraResult.id.desc()).all()
 
     data = []
-    for r in results:
+    for r in camera_results:
+        # 이미지 여러 장 가져오기
+        images = [ '/' + img.image_path.replace('\\','/') 
+                   for img in getattr(r, 'defect_images', []) ]  # relationship 필요
+
         data.append({
             'car_id': r.car_id,
+            'type': '외관불량',
             'result': r.result,
-            'image': r.image_path,
+            'images': images,
             'created_at': r.created_at
         })
+
+    # 센서불량
+    from models.sensor_result import SensorResult
+    sensor_results = SensorResult.query.filter(
+        SensorResult.result == 'DEFECT'
+    ).order_by(SensorResult.id.desc()).all()
+
+    for s in sensor_results:
+        data.append({
+            'car_id': s.car_id,
+            'type': f'{s.device} 센서불량',
+            'result': s.result,
+            'images': [],  # 이미지 없음
+            'created_at': s.created_at
+        })
+
+    # 최신 순 정렬
+    data.sort(key=lambda x: x['created_at'], reverse=True)
 
     return jsonify(data)
 
@@ -74,3 +97,8 @@ def add_camera_result():
     send_stats_update()
   
   return jsonify(result_data), 201
+
+@bp.route('/uploads/camera01/<filename>')
+def serve_image(filename):
+   return send_from_directory('uploads/camera01', filename)
+

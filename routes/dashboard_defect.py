@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
+bp = dashboard_bp
 
 def calc_rate(defect_count, total_count):
     """불량률 계산"""
@@ -15,7 +16,7 @@ def calc_rate(defect_count, total_count):
     return round((defect_count / total_count) * 100, 2)
 
 
-@dashboard_bp.get('/summary')
+@bp.get('/summary')
 def get_dashboard_summary():
     """대시보드 통계 조회"""
     # 전체 자동차 수

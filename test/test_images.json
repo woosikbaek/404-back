@@ -1,0 +1,9 @@
+{
+  "result": "defect",
+  "detection": {
+    "result_image": [
+      "data:image/jpeg;base64,...",
+      "data:image/jpeg;base64,..."
+    ]
+  }
+}
