@@ -181,40 +181,45 @@ def on_connect(client, userdata, flags, rc):
         f"[MQTT] 구독 토픽: {TOPIC_ULT01}, {TOPIC_ULT02}, {TOPIC_ULT03} {TOPIC_SENSOR_RESULT}, {TOPIC_CAMERA01_RESULT}"
     )
 
-
 # 센서 결과 저장
 def save_sensor_result(data):
     global current_car_id
 
     device = data["device"].upper()
-    result = data["result"].upper()  # ok / defect
+    result = data["result"].upper()  # ok / defect / timeout 등
 
     # 안전장치: 차량이 생성되지 않았으면 저장 안 함
     if current_car_id is None:
         print(f"[경고] current_car_id가 None입니다. {device} 저장 안 함")
         return
 
-    sensor = SensorResult(car_id=current_car_id, device=device, result=result)
-    db.session.add(sensor)
-    db.session.commit()
+    # 유효한 결과(OK, DEFECT)일 때만 전체 로직 실행
+    if result in ['OK', 'DEFECT']:
+        # DB 객체 생성 및 저장
+        sensor = SensorResult(car_id=current_car_id, device=device, result=result)
+        db.session.add(sensor)
+        db.session.commit()
 
-    # 🔔 WebSocket 이벤트 발송
-    sensor_data = {
-        "car_id": sensor.car_id,
-        "device": sensor.device,
-        "result": sensor.result,
-        "created_at": sensor.created_at.isoformat(),
-    }
+        # 여기서부터는 sensor 변수가 확실히 존재하므로 안전하게 사용 가능
+        sensor_data = {
+            "car_id": sensor.car_id,
+            "device": sensor.device,
+            "result": sensor.result,
+            "created_at": sensor.created_at.isoformat(),
+        }
 
-    if device == "WHEEL":
-        if sensor.result == "OK":
+        # 장치별 추가 알림 (WHEEL OK인 경우)
+        if device == "WHEEL" and sensor.result == "OK":
             emit_drive_ok()
 
-    if sensor.result == "DEFECT":
-        emit_sensor_defect(sensor_data)
+        # 불량/정상에 따른 알림 분기
+        if sensor.result == "DEFECT":
+            emit_sensor_defect(sensor_data)
+        else:
+            emit_stats_update()
+            
     else:
-        emit_stats_update()
-
+        print(f"[경고] {result} 상태는 DB에 저장하지 않습니다.")
 
 
 # 외관 이미지 저장
@@ -252,11 +257,6 @@ def save_camera_result_image(base64_str):
 # 외관 결과 저장
 def save_camera_result(data):
     global current_car_id
-
-    car = Car()
-    db.session.add(car)
-    db.session.commit()
-    current_car_id = car.id
 
     if current_car_id is None:
         print("[경고] save_camera_result: current_car_id가 None입니다.")
@@ -319,7 +319,7 @@ def emit_drive_ok():
 def on_message(client, userdata, msg):
     with _flask_app.app_context():
         try:
-            # sensor/control 토픽: 기능검사 시작 신호
+            # ult01 토픽: 기능검사 시작 신호
             if msg.topic == TOPIC_ULT01:
                 data = msg.payload.decode()
                 print(f"[ult01] 수신: {data}")
@@ -365,7 +365,7 @@ def on_message(client, userdata, msg):
 
 
 def start_car_inspection():
-    """기능검사 시작 - 새로운 차량 생성"""
+    # 기능검사 시작  새로운 차량 생성
     global current_car_id
 
     car = Car()
