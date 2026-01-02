@@ -261,6 +261,12 @@ def save_camera_result(data):
     if current_car_id is None:
         print("[경고] save_camera_result: current_car_id가 None입니다.")
         return
+    
+    existing_images_count = DefectImage.query.filter_by(car_id=current_car_id).count()
+    
+    if existing_images_count >= int(os.getenv('MAX_DEFECT_IMAGE_COUNT')):
+        # 이미 MAX_DEFECT_IMAGE_COUNT만큼 저장되었다면 더 이상 DB 저장 및 파일 저장을 하지 않음
+        return
 
     # 검사 결과 저장 (이미지 없음)
     camera = CameraResult(car_id=current_car_id, result=data["result"].upper())
@@ -299,11 +305,11 @@ def save_camera_result(data):
         emit_case_ok()
         emit_stats_update()
 
-def emit_sensor_start():
+def emit_start():
     if _socketio:
         _socketio.emit('progress', {'start': 'ok', 'car_id': current_car_id})
 
-def emit_sensor_end():
+def emit_sensor_ok():
     if _socketio:
         _socketio.emit('progress', {'sensor': 'ok'})
 
@@ -319,46 +325,41 @@ def emit_drive_ok():
 def on_message(client, userdata, msg):
     with _flask_app.app_context():
         try:
-            # ult01 토픽: 기능검사 시작 신호
-            if msg.topic == TOPIC_ULT01:
-                data = msg.payload.decode()
-                print(f"[ult01] 수신: {data}")
+            # 페이로드 디코딩 및 공백 제거
+            payload_str = msg.payload.decode().strip()
 
-                if data.lower() == "true":
-                    start_car_inspection()
+            # ULT01 (시작 신호) 처리 - 단순 문자열이므로 JSON 파싱 전에 처리
+            if msg.topic == TOPIC_ULT01:
+                print(f"[ult01] 수신: {payload_str}")
+                if payload_str.lower() == "true":
+                    # 검사 시작 로직 실행 (두 함수가 같은 역할을 한다면 합치거나 순차 실행)
+                    start_car_inspection() 
+                    emit_start() 
                 return
 
-            # 검사 결과 토픽
-            data = json.loads(msg.payload.decode())
+            # 나머지 토픽은 JSON(객체) 데이터이므로 파싱 진행
+            try:
+                data = json.loads(payload_str)
+            except json.JSONDecodeError as e:
+                print(f"[에러] JSON 파싱 실패 (Topic: {msg.topic}): {e}")
+                return
 
+            # --- 센서 결과 처리 ---
             if msg.topic == TOPIC_SENSOR_RESULT:
+                print(f"[센서 결과] 수신: {data}")
                 save_sensor_result(data)
-                print(f"[센서 결과] {data}")
+                if data.get('device') == 'LED':
+                    emit_sensor_ok()
 
+            # --- 카메라 결과 처리 ---
             elif msg.topic == TOPIC_CAMERA01_RESULT:
-                # MQTT payload는 bytes → str → dict
-                if isinstance(msg.payload, bytes):
-                    try:
-                        data = json.loads(msg.payload.decode())
-                    except Exception as e:
-                        print(f"[에러] JSON 파싱 실패: {e}")
-                        return
-
-                # 'result'가 없으면 경고
+                print(f"[카메라 결과] 수신됨")
                 if 'result' not in data:
                     print("[경고] result 키 없음:", data)
                     return
-
+                
+                # 이전에 수정한 리스트 구조 대응 save_camera_result 호출
                 save_camera_result(data)
-                print(f"[카메라 결과] {data}")
-
-            elif msg.topic == TOPIC_ULT01:
-                if data == True:
-                    emit_sensor_start()
-            
-            elif msg.topic == TOPIC_ULT02:
-                if data == True:
-                    emit_sensor_end()
 
         except Exception as e:
             print(f"[에러] on_message 처리 실패: {e}")
