@@ -21,7 +21,7 @@ def get_camera_results():
       'device': r.device,
       'result': r.result,
       'image': r.image_path,
-      'created_at': r.created_at
+      'created_at': r.created_at.isoformat()
     })
 
   return jsonify(data)
@@ -44,7 +44,7 @@ def get_defects():
             'type': '외관불량',
             'result': r.result,
             'images': images,
-            'created_at': r.created_at
+            'created_at': r.created_at.isoformat()
         })
 
     # 센서불량
@@ -59,7 +59,7 @@ def get_defects():
             'type': f'{s.device} 센서불량',
             'result': s.result,
             'images': [],  # 이미지 없음
-            'created_at': s.created_at
+            'created_at': s.created_at.isoformat()
         })
 
     # 최신 순 정렬

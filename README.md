@@ -3,6 +3,16 @@
 Flask 기반의 IoT 센서 데이터 수집 및 실시간 모니터링 백엔드 시스템입니다.  
 MQTT 프로토콜을 통해 센서 데이터를 수집하고, WebSocket으로 실시간 대시보드에 전송합니다.
 
+# 404found 2차 프로젝트
+> **프로젝트의 모든 과정을 담은 상세 시연 영상입니다.** > 이미지 또는 버튼을 클릭하면 유튜브 페이지로 이동합니다.
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=pIhjj_DyJ7Q">
+    <img src="https://img.youtube.com/vi/pIhjj_DyJ7Q/maxresdefault.jpg" width="80%" alt="404found 2차 프로젝트 시연영상">
+    <br>
+    <img src="https://img.shields.io/badge/YouTube-Watch_Video-red?style=for-the-badge&logo=youtube" alt="Youtube Button">
+  </a>
+</div>
+
 ## 📁 프로젝트 구조
 
 ```

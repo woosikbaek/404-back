@@ -19,7 +19,7 @@ def get_sensor_result():
       'car_id': r.car_id,
       'device': r.device,
       'result': r.result,
-      'created_at': r.created_at
+      'created_at': r.created_at.isoformat()
     })
 
   return jsonify(data)
@@ -38,7 +38,7 @@ def get_sensor_defects():
             'car_id': r.car_id,
             'device': r.device,
             'result': r.result,
-            'created_at': r.created_at
+            'created_at': r.created_at.isoformat()
         })
 
     return jsonify(data)
