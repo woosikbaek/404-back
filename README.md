@@ -235,3 +235,6 @@ def save_sensor_result(data):
 
 ## 작성자
 404found 2차 프로젝트 - IoT 자동차 품질 검사 시스템
+
+## ERD 구조
+- [ERD Cloud](https://www.erdcloud.com/d/rfbhh56TFNjiobguv)
